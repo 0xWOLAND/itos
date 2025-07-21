@@ -1,0 +1,13 @@
+{
+  "name": "braille-stippling-art",
+  "version": "1.0.0",
+  "description": "Convert images to Unicode Braille stippling art",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "keywords": ["braille", "art", "image-processing", "stippling", "unicode"],
+  "author": "",
+  "license": "MIT"
+}
