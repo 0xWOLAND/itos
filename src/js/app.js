@@ -58,11 +58,12 @@ sizeToggle.addEventListener('click', () => {
 
 // Method toggle button
 let currentMethod = 'dither';
-const methods = {dither: 'Floyd-Steinberg', poisson: 'Poisson Disk'};
+const methods = {dither: 'Flow', poisson: 'Scatter'};
 const methodToggle = document.getElementById('methodToggle');
 methodToggle.addEventListener('click', () => {
     currentMethod = currentMethod === 'dither' ? 'poisson' : 'dither';
     methodToggle.textContent = methods[currentMethod];
+    if (currentImage) convertToBraille();
 });
 
 // Color toggle button
@@ -71,6 +72,7 @@ const colorToggle = document.getElementById('colorToggle');
 colorToggle.addEventListener('click', () => {
     colorMode = !colorMode;
     colorToggle.textContent = colorMode ? 'Color' : 'Mono';
+    if (currentImage) convertToBraille();
 });
 
 
