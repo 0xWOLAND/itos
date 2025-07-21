@@ -7,38 +7,14 @@
     <link rel="stylesheet" href="../src/css/styles.css">
 </head>
 <body>
-    <h1>🎨 Braille Stippling Art Generator</h1>
+    <h1>ITOS: Image to Stippling</h1>
     
     <div class="controls">
-        <div class="control">
-            <label>Size</label>
-            <div class="size-buttons">
-                <button class="size-btn active">Small</button>
-                <button class="size-btn">Medium</button>
-                <button class="size-btn">Large</button>
-            </div>
-        </div>
+        <button id="sizeToggle">Small</button>
+        <button id="methodToggle">Floyd-Steinberg</button>
+        <button id="colorToggle">Mono</button>
         
-        <div class="control method-selector">
-            <label>
-                <input type="radio" name="method" value="dither" checked>
-                Floyd-Steinberg
-            </label>
-            <label>
-                <input type="radio" name="method" value="poisson">
-                Poisson Disk
-            </label>
-        </div>
-        
-        
-        <div class="control">
-            <label>
-                <input type="checkbox" id="colorMode">
-                Color mode
-            </label>
-        </div>
-        
-        <button id="copyBtn" style="display:none">Copy to Clipboard</button>
+        <button id="copyBtn" disabled>Copy to Clipboard</button>
     </div>
     
     <div id="output">

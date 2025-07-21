@@ -46,15 +46,31 @@ fileInput.addEventListener('change', (e) => {
     }
 });
 
-// Size button handling
+// Size toggle button
 let currentSize = 'small';
-const sizeButtons = document.querySelectorAll('.size-btn');
-sizeButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        sizeButtons.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        currentSize = e.target.textContent.toLowerCase();
-    });
+const sizes = ['small', 'medium', 'large'];
+const sizeToggle = document.getElementById('sizeToggle');
+sizeToggle.addEventListener('click', () => {
+    const currentIndex = sizes.indexOf(currentSize);
+    currentSize = sizes[(currentIndex + 1) % 3];
+    sizeToggle.textContent = currentSize.charAt(0).toUpperCase() + currentSize.slice(1);
+});
+
+// Method toggle button
+let currentMethod = 'dither';
+const methods = {dither: 'Floyd-Steinberg', poisson: 'Poisson Disk'};
+const methodToggle = document.getElementById('methodToggle');
+methodToggle.addEventListener('click', () => {
+    currentMethod = currentMethod === 'dither' ? 'poisson' : 'dither';
+    methodToggle.textContent = methods[currentMethod];
+});
+
+// Color toggle button
+let colorMode = false;
+const colorToggle = document.getElementById('colorToggle');
+colorToggle.addEventListener('click', () => {
+    colorMode = !colorMode;
+    colorToggle.textContent = colorMode ? 'Color' : 'Mono';
 });
 
 
@@ -151,9 +167,8 @@ function convertToBraille() {
     if (!currentImage) return;
     
     let threshold = 128;
-    const method = document.querySelector('input[name="method"]:checked').value;
+    const method = currentMethod;
     const autoCalibrate = true;
-    const colorMode = document.getElementById('colorMode')?.checked ?? false;
     
     // Calculate maximum dimensions based on output area (800x600px)
     const outputWidth = 800;
@@ -244,8 +259,10 @@ function convertToBraille() {
     
     // Convert dots to Braille
     let brailleText;
+    let isColorMode = false;
     if (colorMode) {
         brailleText = dotsToColorBraille(dots, data, canvas.width, canvas.height);
+        isColorMode = true;
     } else {
         brailleText = dotsToBraille(dots, canvas.width, canvas.height);
     }
@@ -253,7 +270,10 @@ function convertToBraille() {
     // Calculate the actual size of the output
     const lines = brailleText.trim().split('\n');
     const actualHeight = lines.length;
-    const actualWidth = lines[0] ? lines[0].length : 0;
+    // For color mode, we need to count actual characters, not HTML
+    const actualWidth = isColorMode ? 
+        Math.max(...lines.map(line => (line.match(/>(.)</g) || []).length)) :
+        (lines[0] ? lines[0].length : 0);
     
     // Calculate font size to fit within container without scrollbars
     // Need to measure actual character dimensions for accurate sizing
@@ -285,9 +305,14 @@ function convertToBraille() {
         optimal: optimalFontSize
     });
     
-    // Use the optimal font size - remove flex centering to use full space
-    output.innerHTML = `<pre style="font-family: monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; box-sizing: border-box; width: 100%; height: 100%; text-align: center;">${brailleText}</pre>`;
-    copyBtn.style.display = 'inline-block';
+    // Use the optimal font size and center the content
+    if (isColorMode) {
+        // For color mode, use a div instead of pre to handle HTML properly
+        output.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><pre style="font-family: monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; text-align: center;">${brailleText}</pre></div>`;
+    } else {
+        output.innerHTML = `<pre style="font-family: monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">${brailleText}</pre>`;
+    }
+    copyBtn.disabled = false;
     
     // Hide dropzone after conversion
     const dropzone = document.getElementById('dropzone');
