@@ -13,10 +13,7 @@ const BRAILLE_BITS = {
 // UI Elements
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
-const preview = document.getElementById('preview');
-const previewImg = document.getElementById('previewImg');
 const output = document.getElementById('output');
-const convertBtn = document.getElementById('convertBtn');
 const copyBtn = document.getElementById('copyBtn');
 
 let currentImage = null;
@@ -50,20 +47,16 @@ fileInput.addEventListener('change', (e) => {
 });
 
 // Size button handling
-let currentScale = 0.3;
 let currentSize = 'small';
 const sizeButtons = document.querySelectorAll('.size-btn');
 sizeButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
         sizeButtons.forEach(b => b.classList.remove('active'));
         e.target.classList.add('active');
-        currentScale = parseFloat(e.target.dataset.scale);
         currentSize = e.target.textContent.toLowerCase();
     });
 });
 
-// Convert button
-convertBtn.addEventListener('click', convertToBraille);
 
 // Copy button
 copyBtn.addEventListener('click', () => {
@@ -81,9 +74,7 @@ function loadImage(file) {
         const img = new Image();
         img.onload = () => {
             currentImage = img;
-            previewImg.src = e.target.result;
-            preview.style.display = 'block';
-            convertBtn.disabled = false;
+            convertToBraille(); // Auto-convert
         };
         img.src = e.target.result;
     };
@@ -159,11 +150,47 @@ function applyHistogramStretching(grayscale) {
 function convertToBraille() {
     if (!currentImage) return;
     
-    const scale = currentScale;
     let threshold = 128;
     const method = document.querySelector('input[name="method"]:checked').value;
-    const autoCalibrate = document.getElementById('autoCalibrate')?.checked ?? true;
+    const autoCalibrate = true;
     const colorMode = document.getElementById('colorMode')?.checked ?? false;
+    
+    // Calculate maximum dimensions based on output area (800x600px)
+    const outputWidth = 800;
+    const outputHeight = 600;
+    
+    // Size setting now controls quality/density
+    const qualityMultiplier = {
+        small: 0.7,   // Lower quality, faster
+        medium: 0.85, // Medium quality
+        large: 1.0    // Highest quality
+    };
+    const quality = qualityMultiplier[currentSize];
+    
+    // Calculate based on the actual output area and typical font metrics
+    // Assuming we want to fill the area, work backwards from the output size
+    // Typical monospace: width = 0.6 * height
+    const targetFontSize = 6; // Base size for calculations
+    const charWidth = targetFontSize * 0.6;
+    const charHeight = targetFontSize;
+    
+    // How many Braille characters can we fit?
+    const targetBrailleWidth = Math.floor((outputWidth - 20) / charWidth);
+    const targetBrailleHeight = Math.floor((outputHeight - 20) / charHeight);
+    
+    // Each Braille cell represents 2x4 pixels
+    // But we need to account for aspect ratio
+    const targetPixelWidth = targetBrailleWidth * 2;
+    const targetPixelHeight = targetBrailleHeight * 4;
+    
+    // Calculate scale to process image at this resolution
+    const scaleX = targetPixelWidth / currentImage.width;
+    const scaleY = targetPixelHeight / currentImage.height;
+    const baseScale = Math.min(scaleX, scaleY);
+    
+    // Apply quality multiplier
+    const scale = baseScale * quality;
+    
     
     // Create canvas
     const canvas = document.createElement('canvas');
@@ -208,25 +235,82 @@ function convertToBraille() {
     // Generate dots based on method
     let dots;
     switch (method) {
-        case 'dither':
-            dots = floydSteinbergDither(grayscale, canvas.width, canvas.height, threshold);
-            break;
         case 'poisson':
-            dots = poissonDiskSampling(grayscale, canvas.width, canvas.height, threshold);
+            dots = poissonDiskSampling(grayscale, canvas.width, canvas.height);
             break;
-        default:
-            dots = thresholdMethod(grayscale, canvas.width, canvas.height, threshold);
+        default: // 'dither'
+            dots = floydSteinbergDither(grayscale, canvas.width, canvas.height, threshold);
     }
     
     // Convert dots to Braille
+    let brailleText;
     if (colorMode) {
-        const brailleText = dotsToColorBraille(dots, data, canvas.width, canvas.height);
-        output.innerHTML = `<pre style="font-family: monospace; font-size: 6px; line-height: 6px;">${brailleText}</pre>`;
+        brailleText = dotsToColorBraille(dots, data, canvas.width, canvas.height);
     } else {
-        const brailleText = dotsToBraille(dots, canvas.width, canvas.height);
-        output.textContent = brailleText;
+        brailleText = dotsToBraille(dots, canvas.width, canvas.height);
     }
+    
+    // Calculate the actual size of the output
+    const lines = brailleText.trim().split('\n');
+    const actualHeight = lines.length;
+    const actualWidth = lines[0] ? lines[0].length : 0;
+    
+    // Calculate font size to fit within container without scrollbars
+    // Need to measure actual character dimensions for accurate sizing
+    const testEl = document.createElement('span');
+    testEl.style.fontFamily = 'monospace';
+    testEl.style.fontSize = '10px';
+    testEl.style.position = 'absolute';
+    testEl.style.visibility = 'hidden';
+    testEl.textContent = '⠿';
+    document.body.appendChild(testEl);
+    
+    const charRatio = testEl.offsetWidth / 10; // Actual width per font-size unit
+    document.body.removeChild(testEl);
+    
+    // Account for padding (20px total: 10px on each side)
+    const availableWidth = outputWidth - 20;
+    const availableHeight = outputHeight - 20;
+    
+    // Calculate maximum font size that fits without scrolling
+    const fitWidthFontSize = Math.floor(availableWidth / (actualWidth * charRatio));
+    const fitHeightFontSize = Math.floor(availableHeight / actualHeight);
+    const optimalFontSize = Math.min(fitWidthFontSize, fitHeightFontSize);
+    
+    console.log('Size calculations:', {
+        outputSize: { width: outputWidth, height: outputHeight },
+        brailleSize: { width: actualWidth, height: actualHeight },
+        charRatio,
+        fitSizes: { width: fitWidthFontSize, height: fitHeightFontSize },
+        optimal: optimalFontSize
+    });
+    
+    // Use the optimal font size - remove flex centering to use full space
+    output.innerHTML = `<pre style="font-family: monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; box-sizing: border-box; width: 100%; height: 100%; text-align: center;">${brailleText}</pre>`;
     copyBtn.style.display = 'inline-block';
+    
+    // Hide dropzone after conversion
+    const dropzone = document.getElementById('dropzone');
+    if (dropzone) dropzone.style.display = 'none';
+    
+    // Enable drag and drop on the entire output area
+    output.ondragover = (e) => {
+        e.preventDefault();
+        output.style.outlineColor = '#0ff';
+    };
+    
+    output.ondragleave = () => {
+        output.style.outlineColor = '';
+    };
+    
+    output.ondrop = (e) => {
+        e.preventDefault();
+        output.style.outlineColor = '';
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            loadImage(file);
+        }
+    };
 }
 
 function thresholdMethod(grayscale, width, height, threshold) {
