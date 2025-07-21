@@ -24,15 +24,18 @@ dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropzone.classList.add('dragover');
+    output.style.borderColor = '#00E100';
 });
 
 dropzone.addEventListener('dragleave', () => {
     dropzone.classList.remove('dragover');
+    output.style.borderColor = '';
 });
 
 dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('dragover');
+    output.style.borderColor = '';
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
         loadImage(file);
@@ -323,16 +326,16 @@ function convertToBraille() {
     // Enable drag and drop on the entire output area
     output.ondragover = (e) => {
         e.preventDefault();
-        output.style.outlineColor = '#0ff';
+        output.style.borderColor = '#00E100';
     };
     
     output.ondragleave = () => {
-        output.style.outlineColor = '';
+        output.style.borderColor = '';
     };
     
     output.ondrop = (e) => {
         e.preventDefault();
-        output.style.outlineColor = '';
+        output.style.borderColor = '';
         const file = e.dataTransfer.files[0];
         if (file && file.type.startsWith('image/')) {
             loadImage(file);
