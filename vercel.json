@@ -1,13 +1,5 @@
 {
   "version": 2,
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/public/index.html"
-    },
-    {
-      "source": "/src/:path*",
-      "destination": "/src/:path*"
-    }
-  ]
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
 }
