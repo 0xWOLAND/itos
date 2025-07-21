@@ -14,7 +14,7 @@ const BRAILLE_BITS = {
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const output = document.getElementById('output');
-const copyBtn = document.getElementById('copyBtn');
+// const copyBtn = document.getElementById('copyBtn');
 
 let currentImage = null;
 
@@ -49,44 +49,50 @@ fileInput.addEventListener('change', (e) => {
     }
 });
 
-// Size toggle button
-let currentSize = 'small';
-const sizes = ['small', 'medium', 'large'];
-const sizeToggle = document.getElementById('sizeToggle');
-sizeToggle.addEventListener('click', () => {
-    const currentIndex = sizes.indexOf(currentSize);
-    currentSize = sizes[(currentIndex + 1) % 3];
-    sizeToggle.textContent = currentSize.charAt(0).toUpperCase() + currentSize.slice(1);
-});
+// GUI setup
+const params = {
+    size: 0.7,
+    method: 'Flow',
+    color: 'Mono',
+    copy: () => {
+        navigator.clipboard.writeText(output.textContent);
+    }
+};
 
-// Method toggle button
-let currentMethod = 'dither';
-const methods = {dither: 'Flow', poisson: 'Scatter'};
-const methodToggle = document.getElementById('methodToggle');
-methodToggle.addEventListener('click', () => {
-    currentMethod = currentMethod === 'dither' ? 'poisson' : 'dither';
-    methodToggle.textContent = methods[currentMethod];
+import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.20/+esm';
+
+const gui = new GUI();
+// Create a select dropdown that looks like a slider
+const sizeOptions = {
+    'Small': 0.7,
+    'Medium': 0.85,
+    'Large': 1.0
+};
+
+// Create a proxy property for the dropdown
+const guiParams = {
+    sizeLabel: 'Small',
+    method: params.method,
+    color: params.color,
+    copy: params.copy
+};
+
+gui.add(guiParams, 'sizeLabel', Object.keys(sizeOptions))
+    .name('Size')
+    .onChange((value) => {
+        params.size = sizeOptions[value];
+        if (currentImage) convertToBraille();
+    });
+gui.add(guiParams, 'method', ['Flow', 'Scatter']).onChange((value) => {
+    params.method = value;
     if (currentImage) convertToBraille();
 });
-
-// Color toggle button
-let colorMode = false;
-const colorToggle = document.getElementById('colorToggle');
-colorToggle.addEventListener('click', () => {
-    colorMode = !colorMode;
-    colorToggle.textContent = colorMode ? 'Color' : 'Mono';
+gui.add(guiParams, 'color', ['Mono', 'Color']).onChange((value) => {
+    params.color = value;
     if (currentImage) convertToBraille();
 });
+gui.add(guiParams, 'copy');
 
-
-// Copy button
-copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(output.textContent);
-    copyBtn.textContent = 'Copied!';
-    setTimeout(() => {
-        copyBtn.textContent = 'Copy to Clipboard';
-    }, 2000);
-});
 
 
 function loadImage(file) {
@@ -172,7 +178,7 @@ function convertToBraille() {
     if (!currentImage) return;
     
     let threshold = 128;
-    const method = currentMethod;
+    const method = params.method === 'Flow' ? 'dither' : 'poisson';
     const autoCalibrate = true;
     
     // Calculate maximum dimensions based on output area (800x600px)
@@ -180,12 +186,7 @@ function convertToBraille() {
     const outputHeight = 600;
     
     // Size setting now controls quality/density
-    const qualityMultiplier = {
-        small: 0.7,   // Lower quality, faster
-        medium: 0.85, // Medium quality
-        large: 1.0    // Highest quality
-    };
-    const quality = qualityMultiplier[currentSize];
+    const quality = params.size;
     
     // Calculate based on the actual output area and typical font metrics
     // Assuming we want to fill the area, work backwards from the output size
@@ -265,7 +266,7 @@ function convertToBraille() {
     // Convert dots to Braille
     let brailleText;
     let isColorMode = false;
-    if (colorMode) {
+    if (params.color === 'Color') {
         brailleText = dotsToColorBraille(dots, data, canvas.width, canvas.height);
         isColorMode = true;
     } else {
@@ -317,7 +318,7 @@ function convertToBraille() {
     } else {
         output.innerHTML = `<pre style="font-family: monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">${brailleText}</pre>`;
     }
-    copyBtn.disabled = false;
+    // copyBtn.disabled = false;
     
     // Hide dropzone after conversion
     const dropzone = document.getElementById('dropzone');
