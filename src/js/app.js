@@ -4,8 +4,8 @@ const BRAILLE = {'0,0':1,'0,1':2,'0,2':4,'1,0':8,'1,1':16,'1,2':32,'0,3':64,'1,3
 const [drop, input, out] = ['dropzone','fileInput','output'].map(id => document.getElementById(id));
 let img = null;
 
-const cfg = {size: 0.85, method: 'Flow', color: 'Mono', brightness: 0.2, copy: () => navigator.clipboard.writeText(out.textContent)};
-const sizes = {Small: 0.7, Medium: 0.85, Large: 1.0};
+const cfg = {size: 1.2, method: 'Flow', color: 'Mono', brightness: 0.2, copy: () => navigator.clipboard.writeText(out.textContent)};
+const sizes = {Small: 1.0, Medium: 1.5, Large: 2.5};
 const ui = {sizeLabel: 'Medium', method: cfg.method, color: cfg.color, brightness: cfg.brightness, copy: cfg.copy};
 
 const gui = new GUI();
@@ -20,26 +20,28 @@ gui.close();
 
 drop.onclick = () => input.click();
 
-drop.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  drop.classList.add('dragover');
-  out.style.borderColor = '#00E100';
-});
+const setupDropzone = (el) => {
+  el.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    el.classList.add('dragover');
+    out.style.borderColor = '#00E100';
+  });
+  
+  el.addEventListener('dragleave', () => {
+    el.classList.remove('dragover');
+    out.style.borderColor = '';
+  });
+  
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('dragover');
+    out.style.borderColor = '';
+    handleDrop(e);
+  });
+};
 
-drop.addEventListener('dragleave', () => {
-  drop.classList.remove('dragover');
-  out.style.borderColor = '';
-});
-
-drop.addEventListener('drop', (e) => {
-  e.preventDefault();
-  drop.classList.remove('dragover');
-  out.style.borderColor = '';
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('image/')) {
-    load(file);
-  }
-});
+setupDropzone(drop);
+setupDropzone(out);
 
 input.addEventListener('change', (e) => {
   const file = e.target.files[0];
@@ -56,6 +58,22 @@ const load = f => {
     i.src = e.target.result;
   };
   r.readAsDataURL(f);
+};
+
+const handleDrop = e => {
+  const file = e.dataTransfer.files[0];
+  if (file?.type.startsWith('image/')) return load(file);
+  
+  const html = e.dataTransfer.getData('text/html');
+  const src = html && new DOMParser().parseFromString(html, 'text/html').querySelector('img')?.src;
+  const url = src || e.dataTransfer.getData('text/plain');
+  
+  if (url) fetch(url).then(r => r.blob()).then(load).catch(() => {
+    const i = new Image();
+    i.crossOrigin = 'anonymous';
+    i.onload = () => { img = i; convert(); };
+    i.src = url;
+  });
 };
 
 const otsu = (g, w, h) => {
@@ -88,31 +106,13 @@ const stretch = g => {
 const convert = () => {
   if (!img) return;
   
-  const outputEl = document.getElementById('output');
-  const [oW, oH] = [outputEl.offsetWidth, outputEl.offsetHeight];
-  const thresh = 128;
-  const method = cfg.method === 'Flow' ? 'dither' : 'poisson';
-  const autoCalibrate = true;
-  const quality = cfg.size;
-  
-  const targetFontSize = 6;
-  const charWidth = targetFontSize * 0.6;
-  const charHeight = targetFontSize;
-  
-  const targetBrailleWidth = Math.floor((oW - 20) / charWidth);
-  const targetBrailleHeight = Math.floor((oH - 20) / charHeight);
-  
-  const targetPixelWidth = targetBrailleWidth * 2;
-  const targetPixelHeight = targetBrailleHeight * 4;
-  
-  const scaleX = targetPixelWidth / img.width;
-  const scaleY = targetPixelHeight / img.height;
-  const baseScale = Math.min(scaleX, scaleY);
-  const scale = baseScale * quality;
+  const out = document.getElementById('output');
+  const [oW, oH] = [out.offsetWidth, out.offsetHeight];
+  const scale = Math.min((oW - 20) / (img.width * 0.6), (oH - 20) / (img.height * 6)) * cfg.size;
   
   const cvs = document.createElement('canvas');
   const ctx = cvs.getContext('2d');
-  [cvs.width, cvs.height] = [~~(img.width * scale), ~~(img.height * scale)];
+  [cvs.width, cvs.height] = [~~(img.width * scale * 0.75), ~~(img.height * scale)];
   ctx.drawImage(img, 0, 0, cvs.width, cvs.height);
   
   let data = ctx.getImageData(0, 0, cvs.width, cvs.height).data;
@@ -139,13 +139,10 @@ const convert = () => {
   }
   
   stretch(gray);
-  let threshold = thresh;
-  if (autoCalibrate) {
-    threshold = otsu(gray, cvs.width, cvs.height);
-  }
+  const threshold = otsu(gray, cvs.width, cvs.height);
   for (let i = 0; i < gray.length; i++) gray[i] = 255 - gray[i];
   
-  const dots = method === 'dither' ? dither(gray, cvs.width, cvs.height, threshold) : poisson(gray, cvs.width, cvs.height);
+  const dots = cfg.method === 'Flow' ? dither(gray, cvs.width, cvs.height, threshold) : poisson(gray, cvs.width, cvs.height);
   const txt = toBraille(dots, data, cvs.width, cvs.height, cfg.color);
   
   const lines = txt.trim().split('\n');
@@ -155,45 +152,14 @@ const convert = () => {
   test.style.cssText = 'font-family:"IBM Plex Mono",monospace;font-size:10px;position:absolute;visibility:hidden';
   test.textContent = '⠿';
   document.body.appendChild(test);
-  const charRatio = test.offsetWidth / 10;
+  const charRatio = test.offsetWidth / test.offsetHeight;
   document.body.removeChild(test);
   
-  const availableWidth = oW - 20;
-  const availableHeight = oH - 20;
+  const fontSize = Math.min((oW - 20) / (w * charRatio), (oH - 20) / h);
   
-  const fitWidthFontSize = Math.floor(availableWidth / (w * charRatio));
-  const fitHeightFontSize = Math.floor(availableHeight / h);
-  const optimalFontSize = Math.min(fitWidthFontSize, fitHeightFontSize);
-  
-  console.log('Size calculations:', {
-    outputSize: { width: oW, height: oH },
-    brailleSize: { width: w, height: h },
-    charRatio,
-    fitSizes: { width: fitWidthFontSize, height: fitHeightFontSize },
-    optimal: optimalFontSize
-  });
-  
-  out.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><pre style="font-family: 'IBM Plex Mono', monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; text-align: center;">${txt}</pre></div>`;
+  out.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><pre style="font-family: 'IBM Plex Mono', monospace; font-size: ${fontSize}px; line-height: ${fontSize}px; margin: 0; padding: 10px; text-align: center;">${txt}</pre></div>`;
   
   drop.style.display = 'none';
-  
-  out.ondragover = (e) => {
-    e.preventDefault();
-    out.style.borderColor = '#00E100';
-  };
-  
-  out.ondragleave = () => {
-    out.style.borderColor = '';
-  };
-  
-  out.ondrop = (e) => {
-    e.preventDefault();
-    out.style.borderColor = '';
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      load(file);
-    }
-  };
 };
 
 const dither = (g, w, h, t) => {
