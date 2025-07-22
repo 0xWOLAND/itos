@@ -16,6 +16,7 @@ const gui = new GUI();
 );
 gui.add(ui, 'brightness', 0, 1).onChange(v => { cfg.brightness = v; img && convert(); });
 gui.add(ui, 'copy');
+gui.close();
 
 drop.onclick = () => input.click();
 
