@@ -4,8 +4,8 @@ const BRAILLE = {'0,0':1,'0,1':2,'0,2':4,'1,0':8,'1,1':16,'1,2':32,'0,3':64,'1,3
 const [drop, input, out] = ['dropzone','fileInput','output'].map(id => document.getElementById(id));
 let img = null;
 
-const cfg = {size: 1.2, method: 'Flow', color: 'Mono', brightness: 0.2, copy: () => navigator.clipboard.writeText(out.textContent)};
-const sizes = {Small: 1.0, Medium: 1.5, Large: 2.5};
+const sizes = {Small: 1.0, Medium: 2.5, Large: 4.0};
+const cfg = {size: sizes.Medium, method: 'Flow', color: 'Mono', brightness: 0.2, copy: () => navigator.clipboard.writeText(out.textContent)};
 const ui = {sizeLabel: 'Medium', method: cfg.method, color: cfg.color, brightness: cfg.brightness, copy: cfg.copy};
 
 const gui = new GUI();
