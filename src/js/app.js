@@ -4,9 +4,9 @@ const BRAILLE = {'0,0':1,'0,1':2,'0,2':4,'1,0':8,'1,1':16,'1,2':32,'0,3':64,'1,3
 const [drop, input, out] = ['dropzone','fileInput','output'].map(id => document.getElementById(id));
 let img = null;
 
-const cfg = {size: 0.7, method: 'Flow', color: 'Mono', copy: () => navigator.clipboard.writeText(out.textContent)};
+const cfg = {size: 0.85, method: 'Flow', color: 'Mono', brightness: 0.2, copy: () => navigator.clipboard.writeText(out.textContent)};
 const sizes = {Small: 0.7, Medium: 0.85, Large: 1.0};
-const ui = {sizeLabel: 'Small', method: cfg.method, color: cfg.color, copy: cfg.copy};
+const ui = {sizeLabel: 'Medium', method: cfg.method, color: cfg.color, brightness: cfg.brightness, copy: cfg.copy};
 
 const gui = new GUI();
 ['sizeLabel','method','color'].forEach((k,i) => 
@@ -14,6 +14,7 @@ const gui = new GUI();
     .name(k[0].toUpperCase() + k.slice(1).replace('Label',''))
     .onChange(v => { cfg[i ? k : 'size'] = i ? v : sizes[v]; img && convert(); })
 );
+gui.add(ui, 'brightness', 0, 1).onChange(v => { cfg.brightness = v; img && convert(); });
 gui.add(ui, 'copy');
 
 drop.onclick = () => input.click();
@@ -112,10 +113,28 @@ const convert = () => {
   [cvs.width, cvs.height] = [~~(img.width * scale), ~~(img.height * scale)];
   ctx.drawImage(img, 0, 0, cvs.width, cvs.height);
   
-  const data = ctx.getImageData(0, 0, cvs.width, cvs.height).data;
+  let data = ctx.getImageData(0, 0, cvs.width, cvs.height).data;
   const gray = new Uint8Array(cvs.width * cvs.height);
-  for (let i = 0; i < data.length; i += 4)
-    gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  
+  const br = 0.5 + cfg.brightness * 2.5; // Scale 0-1 to 0.5-2
+  if (cfg.color === 'Mono') {
+    const grayData = ctx.createImageData(cvs.width, cvs.height);
+    for (let i = 0; i < data.length; i += 4) {
+      const g = Math.min(255, (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) * br);
+      grayData.data[i] = grayData.data[i + 1] = grayData.data[i + 2] = g;
+      grayData.data[i + 3] = data[i + 3];
+      gray[i / 4] = g;
+    }
+    ctx.putImageData(grayData, 0, 0);
+    data = grayData.data;
+  } else {
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = Math.min(255, data[i] * br);
+      data[i + 1] = Math.min(255, data[i + 1] * br);
+      data[i + 2] = Math.min(255, data[i + 2] * br);
+      gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+  }
   
   stretch(gray);
   let threshold = thresh;
@@ -125,10 +144,10 @@ const convert = () => {
   for (let i = 0; i < gray.length; i++) gray[i] = 255 - gray[i];
   
   const dots = method === 'dither' ? dither(gray, cvs.width, cvs.height, threshold) : poisson(gray, cvs.width, cvs.height);
-  const txt = cfg.color == 'Color' ? toColorBraille(dots, data, cvs.width, cvs.height) : toBraille(dots, cvs.width, cvs.height);
+  const txt = toBraille(dots, data, cvs.width, cvs.height, cfg.color);
   
   const lines = txt.trim().split('\n');
-  const [h, w] = [lines.length, cfg.color == 'Color' ? Math.max(...lines.map(l => (l.match(/>(.)</g) || []).length)) : lines[0]?.length || 0];
+  const [h, w] = [lines.length, Math.max(...lines.map(l => (l.match(/>(.)</g) || []).length))];
   
   const test = document.createElement('span');
   test.style.cssText = 'font-family:"IBM Plex Mono",monospace;font-size:10px;position:absolute;visibility:hidden';
@@ -152,11 +171,7 @@ const convert = () => {
     optimal: optimalFontSize
   });
   
-  if (cfg.color === 'Color') {
-    out.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><pre style="font-family: 'IBM Plex Mono', monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; text-align: center;">${txt}</pre></div>`;
-  } else {
-    out.innerHTML = `<pre style="font-family: 'IBM Plex Mono', monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">${txt}</pre>`;
-  }
+  out.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><pre style="font-family: 'IBM Plex Mono', monospace; font-size: ${optimalFontSize}px; line-height: ${optimalFontSize}px; margin: 0; padding: 10px; text-align: center;">${txt}</pre></div>`;
   
   drop.style.display = 'none';
   
@@ -260,20 +275,7 @@ const valid = (c, dots, grid, gW, gH, cell, r) => {
   return true;
 };
 
-const toBraille = (dots, w, h) => {
-  const [bW, bH] = [Math.ceil(w / 2), Math.ceil(h / 4)];
-  const grid = Array(bH).fill().map(() => new Uint8Array(bW));
-  
-  dots.forEach(d => {
-    const [cX, cY] = [~~(d.x / 2), ~~(d.y / 4)];
-    const key = `${~~d.x % 2},${~~d.y % 4}`;
-    if (cY < bH && cX < bW && BRAILLE[key]) grid[cY][cX] |= BRAILLE[key];
-  });
-  
-  return grid.map(row => Array.from(row, c => String.fromCharCode(0x2800 + c)).join('')).join('\n');
-};
-
-const toColorBraille = (dots, data, w, h) => {
+const toBraille = (dots, data, w, h, mode) => {
   const [bW, bH] = [Math.ceil(w / 2), Math.ceil(h / 4)];
   const grid = Array(bH).fill().map(() => Array(bW).fill().map(() => ({b: 0, r: 0, g: 0, bl: 0, n: 0})));
   
@@ -302,7 +304,10 @@ const toColorBraille = (dots, data, w, h) => {
     }
   }
   
-  return grid.map(row => 
-    row.map(c => `<span style="color:rgb(${c.r},${c.g},${c.bl})">${String.fromCharCode(0x2800 + c.b)}</span>`).join('')
-  ).join('\n');
+  return grid.map(row => row.map(c => {
+    const gray = mode === 'Mono' ? ~~(c.r * 0.7) : null;
+    return mode === 'Mono' 
+      ? `<span style="color:rgb(${gray},${gray},${gray})">${String.fromCharCode(0x2800 + c.b)}</span>`
+      : `<span style="color:rgb(${c.r},${c.g},${c.bl})">${String.fromCharCode(0x2800 + c.b)}</span>`;
+  }).join('')).join('\n');
 };
