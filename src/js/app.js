@@ -87,7 +87,8 @@ const stretch = g => {
 const convert = () => {
   if (!img) return;
   
-  const [oW, oH] = [800, 600];
+  const outputEl = document.getElementById('output');
+  const [oW, oH] = [outputEl.offsetWidth, outputEl.offsetHeight];
   const thresh = 128;
   const method = cfg.method === 'Flow' ? 'dither' : 'poisson';
   const autoCalibrate = true;
